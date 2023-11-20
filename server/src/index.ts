@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import express from "express";
 import { log } from "./utils.js";
 import rootRouter from "./routes/root.js";
