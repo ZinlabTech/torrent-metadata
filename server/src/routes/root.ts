@@ -2,14 +2,33 @@ import express from "express";
 import { isValidTorrentData } from "../middlewares.js";
 import { log } from "../utils.js";
 import WebTorrent, { type Torrent } from "webtorrent";
+import WebtorrentHealth from "webtorrent-health";
 
 const router = express.Router();
 const SITE_URL = process.env.SITE_URL;
 const METADATA_FETCH_TIMEOUT = 6000; // in ms
 const webtorrent = new WebTorrent();
 
+interface Response {
+  name: string,
+  infoHash: string,
+  magnetURI: string,
+  peers: string | number,
+  seeders?: string | number,
+  created: Date,
+  createdBy: string,
+  comment:string,
+  announce: string[],
+  files: {
+    name: string,
+    size: number,
+    path: string
+  }[],
+}
+
 const constructData = (torrent: Torrent) => {
-  const data = {
+
+  const data : Response = {
     name: torrent.name,
     infoHash: torrent.infoHash,
     magnetURI: torrent.magnetURI,
@@ -24,6 +43,17 @@ const constructData = (torrent: Torrent) => {
       path: file.path,
     })),
   };
+
+  WebtorrentHealth(torrent.magnetURI, function(err, dataHealth){
+    if (err) return;
+
+    if(dataHealth.peers !== 0) {
+      data.peers = dataHealth.peers;
+    }
+    if(dataHealth.seeds !== 0) {
+      data.seeders = dataHealth.seeds;
+    }
+  });
 
   return data;
 };
@@ -45,7 +75,7 @@ router.post("/", isValidTorrentData);
 router.post("/", async (req, res) => {
   log("Init POST ...");
   const parsedTorrent = req.parsedTorrent;
-  const torrent = webtorrent.add(parsedTorrent, {
+  let torrent = webtorrent.add(parsedTorrent, {
     destroyStoreOnDestroy: true,
   });
 
@@ -53,22 +83,34 @@ router.post("/", async (req, res) => {
   // limited info we get from parsing the magnet URI (the parsed metadata is guaranteed
   // to have `infoHash` field)
   const timeoutID = setTimeout(async () => {
-    res.status(504).json({
-      data: constructData(torrent),
-      message:
-        "The torrent provided doesn't seem to have enough peers to fetch metadata. Returning limited info.",
-    });
-
     webtorrent.remove(torrent, {}, () => {
       log("Timeout while fetching torrent metadata.");
     });
+
+    torrent = webtorrent.add(parsedTorrent, {
+      destroyStoreOnDestroy: true,
+    });
+
+    const timeoutID = setTimeout(async () => {
+      webtorrent.remove(torrent, {}, () => {
+        log("Timeout while fetching torrent metadata.");
+      });
+  
+      res.status(200).json({
+        data: constructData(torrent),
+        message:
+          "The torrent provided doesn't seem to have enough peers to fetch metadata. Returning limited info.",
+      });
+    }, METADATA_FETCH_TIMEOUT);
+    
   }, METADATA_FETCH_TIMEOUT);
 
   torrent.on("metadata", () => {
     log("Metadata parsed...");
     clearTimeout(timeoutID);
-    res.json({ data: constructData(torrent) });
-
+    let dataObj = constructData(torrent);
+    res.json({ data: dataObj });
+    
     webtorrent.remove(torrent, {}, () => {
       log("Torrent removed.");
     });

@@ -6,6 +6,13 @@ declare module "parse-torrent" {
   ): Promise<Record<any, any>>;
 }
 
+declare module "webtorrent-health" {
+  export default function WebtorrentHealth(
+    magnetLink: string,
+    callback: (err, data) => void
+  ): Promise<Record<any, any>>;
+}
+
 declare namespace Express {
   export interface Request {
     parsedTorrent: ParsedTorrent;
