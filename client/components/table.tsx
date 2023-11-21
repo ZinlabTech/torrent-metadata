@@ -14,6 +14,7 @@ export type TorrentData = {
     infoHash: number;
     magnetURI?: string;
     peers?: number;
+    seeders?: number;
     created?: string;
     createdBy?: string;
     comment?: string;
