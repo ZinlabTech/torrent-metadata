@@ -1,0 +1,3 @@
+[submodule "webtorrent-checker"]
+	path = webtorrent-checker
+	url = git@github.com:alxhotel/webtorrent-checker.git

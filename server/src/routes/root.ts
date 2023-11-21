@@ -26,9 +26,9 @@ interface Response {
   }[],
 }
 
-const constructData = (torrent: Torrent) => {
+const constructData = async (torrent: Torrent) => {
 
-  const data : Response = {
+  let data : Response = {
     name: torrent.name,
     infoHash: torrent.infoHash,
     magnetURI: torrent.magnetURI,
@@ -44,15 +44,25 @@ const constructData = (torrent: Torrent) => {
     })),
   };
 
-  WebtorrentHealth(torrent.magnetURI, function(err, dataHealth){
-    if (err) return;
+  // await WebtorrentHealth(torrent.magnetURI, function(err, dataHealth){
+  //   if (err) return;
 
-    if(dataHealth.peers !== 0) {
-      data.peers = dataHealth.peers;
-    }
-    if(dataHealth.seeds !== 0) {
-      data.seeders = dataHealth.seeds;
-    }
+  //   if(dataHealth.peers !== 0) {
+  //     data.peers = dataHealth.peers;
+  //   }
+  //   if(dataHealth.seeds !== 0) {
+  //     data.seeders = dataHealth.seeds;
+  //   }
+  // });
+
+  const webtorrentData = async () => {
+    return await fetch(`http://185.145.245.13:3033/check?magnet=${encodeURIComponent(torrent.magnetURI)}`)
+                .then(res => res.json());
+  }
+
+  await webtorrentData().then(webtorrentData => {
+    data.seeders = webtorrentData.seeds;
+    data.peers = webtorrentData.peers;
   });
 
   return data;
@@ -97,7 +107,7 @@ router.post("/", async (req, res) => {
       });
   
       res.status(200).json({
-        data: constructData(torrent),
+        data: await constructData(torrent),
         message:
           "The torrent provided doesn't seem to have enough peers to fetch metadata. Returning limited info.",
       });
@@ -105,10 +115,10 @@ router.post("/", async (req, res) => {
     
   }, METADATA_FETCH_TIMEOUT);
 
-  torrent.on("metadata", () => {
+  torrent.on("metadata", async () => {
     log("Metadata parsed...");
     clearTimeout(timeoutID);
-    let dataObj = constructData(torrent);
+    let dataObj = await constructData(torrent);
     res.json({ data: dataObj });
     
     webtorrent.remove(torrent, {}, () => {
